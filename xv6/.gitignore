@@ -1,0 +1,35 @@
+*~
+_*
+*.o
+*.d
+*.asm
+*.sym
+*.img
+/mkfs/mkfs
+/kernel/kernel
+/user/usys.S
+.gdbinit
+TAGS
+# xv6 generated disk images
+*.img
+
+# Compiled object files
+*.o
+*.d
+
+# Executables and generated kernel files
+kernel/kernel
+kernel/kernel.asm
+kernel/kernel.sym
+
+# Generated user programs
+user/_*
+
+# Generated binaries and debugging files
+*.out
+*.bin
+*.elf
+
+# Python cache
+__pycache__/
+*.pyc
