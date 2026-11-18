@@ -41,5 +41,67 @@ Our goal:
 A good starting policy is writer preference: once a writer is waiting, prevent new readers from entering until the writer gets an opportunity to run.  
 We will eventually test whether that policy provides the best balance between performance and fairness.
 
+## Understanding xv6 inode locking [Fahad Al Hasan] ##
+Before implementing the reader-writer lock, we need to understand how the original inode lock works. Let's start with one file.  
+`file.h`  
+xv6 → kernel → file.h  
+Find the following structure:  
+```powershell
+// in-memory copy of an inode or in memory representation of an xv6 inode.
+struct inode {
+  uint dev;              // Device number. Identifies the device containing the inode
+  uint inum;             // Identifies the Inode number
+  int ref;               // Reference count. 	Number of in-memory references to the inode
+  struct sleeplock lock; // protects everything below here. Protects inode contents during operations
+  int valid;             // inode has been read from disk? Indicates whether inode metadata has been loaded from disk
+
+  short type; // copy of disk inode. Identifies the file type
+  short major; // Device identifiers for device files
+  short minor; // Device identifiers for device files
+  short nlink; // Number of directory links to the inode
+  uint size; // File size in bytes
+  uint addrs[NDIRECT + 1]; // Addresses of the file's data blocks
+};
+```
+This is the in-memory representation of an xv6 inode.  
+
+The most important line for our project is:
+```powershell
+struct sleeplock lock;
+```
+Currently, xv6 uses an exclusive sleeping lock to protect inode operations.  
+Our project's goal is to investigate how this locking mechanism can be modified to support concurrent readers while preventing writer starvation.  
+We will need to distinguish operations that genuinely read inode data from operations that modify it.  
+
+**Important Fields for our project**
+
+1. `ref` — Reference count
+```powershell
+int ref;
+```
+This tracks how many references the kernel holds to this in-memory inode.  
+For example, two processes may hold references to the same inode.  
+Important: `ref` is not the number of readers currently holding the inode lock.  
+Our future reader-writer lock will need its own mechanism to track active readers.  
+
+2. `lock` — The inode lock
+```powershell
+struct sleeplock lock;
+```
+This is the most important field for our project. Currently, xv6 uses a sleeping lock that allows only one holder at a time.
+<img width="748" height="329" alt="image" src="https://github.com/user-attachments/assets/7834d9ae-7fc1-4274-8dd6-67341d834142" />
+Our project aims to allow multiple safe readers to hold a shared lock while ensuring writers eventually get exclusive access.
+
+3. `valid` — Metadata initialization
+```powershell
+int valid;
+```
+This field indicates whether the inode's metadata has been loaded into its in-memory structure.
+
+When an inode is accessed for the first time, xv6 may need to read its metadata from disk.
+
+That initialization modifies the in-memory inode, which is why not every operation that appears to be a read is automatically safe under a shared lock.
+
+This will matter when we design the new locking mechanism.
 
 
