@@ -102,6 +102,24 @@ When an inode is accessed for the first time, xv6 may need to read its metadata 
 
 That initialization modifies the in-memory inode, which is why not every operation that appears to be a read is automatically safe under a shared lock.
 
-This will matter when we design the new locking mechanism.
+This will matter when we design the new locking mechanism.  
+
+## Understanding sleeping lock implementation [Fahad Al Hasan] ##
+`xv6/kernel/sleeplock.h` Inside this file 
+```powershell
+// Long-term locks for processes
+struct sleeplock {
+  uint locked;        // Is the lock held? Indicates whether the sleeping lock is held.
+  struct spinlock lk; // spinlock protecting this sleep lock. A spinlock used internally to protect the sleeping lock's state.
+
+  // For debugging:
+  char *name; // Name of lock.
+  int pid;    // Process holding lock
+};
+```
+- `locked` — Indicates whether the sleeping lock is held.
+- `lk` — A spinlock used internally to protect the sleeping lock's state.
+This structure does not maintain a reader count or a waiting-writer count.  
+That is one reason the existing sleeping lock does not directly provide the reader-writer behavior that our project requires.
 
 
