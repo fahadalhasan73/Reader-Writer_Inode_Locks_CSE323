@@ -5,3 +5,8 @@ xv6 → kernel → file.h
 Currently trying to understand the struct inode section in file.h   
 Status `Done`.  
 Detailed documentation written on [Understanding xv6 inode locking [Fahad Al Hasan]](https://github.com/fahadalhasan73/Reader-Writer_Inode_Locks_CSE323/blob/main/docs/projectUnderstanding.md#understanding-xv6-inode-locking-fahad-al-hasan)
+
+`struct inode` — Represents an inode in memory.  
+`struct sleeplock` — Provides exclusive locking using an internal spinlock for synchronization.
+
+`sleep_prepare()` & `sleep()` function understanding
