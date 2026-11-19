@@ -8,7 +8,10 @@ struct rwlock {
   struct spinlock lk;  // Protects internal lock state
   int readers;         // Number of active readers
   int writer;          // 1 if a writer holds the lock
+  int writer_pid;      // PID of the process holding the writer lock
   int waiting_writers; // Number of writers waiting
+  uint next_ticket;    // Ticket assigned to the next arriving writer
+  uint serving_ticket; // Ticket of the writer whose turn it is
   char *name;          // Lock name for identification
 };
 
@@ -17,5 +20,6 @@ void acquireread(struct rwlock *lock);
 void releaseread(struct rwlock *lock);
 void acquirewrite(struct rwlock *lock);
 void releasewrite(struct rwlock *lock);
+int holdingwrite(struct rwlock *lock);
 
 #endif // RWLOCK_H
