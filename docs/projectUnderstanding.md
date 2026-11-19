@@ -403,6 +403,8 @@ So far summery
 | `wakeup(chan)` | Notifies waiting processes; exact behavior depends on its implementation |
 | `acquiresleep()` | Coordinates these operations to acquire an exclusive sleeping lock |
 
+## Understanding wakeup() functions [Fahad Al Hasan] ##
+Skipped for time saving
 
 
 
