@@ -287,7 +287,122 @@ It only prepares the process for sleeping by recording its channel.
 
 `release(&p->lock);` — Release the process lock  
 This releases the spinlock protecting the process structure.  
-At this point, `sleep_prepare()` is finished, and the process can continue executing.
+At this point, `sleep_prepare()` is finished, and the process can continue executing.  
+
+**Understanding `sleep()`**  
+```powershell
+void
+sleep(void)
+{
+  struct proc *p = myproc();
+
+  acquire(&p->lock);
+
+  if (p->chan != 0) {
+    p->state = SLEEPING;
+    sched();
+  }
+
+  release(&p->lock);
+}
+```
+
+`void sleep(void)` — Function declaration  
+- The first `void` means the function returns no value.
+- The second `void`, inside parentheses, means the function accepts no arguments.
+
+`struct proc *p = myproc();` — Get the current process  
+Again, this obtains the process structure of the currently running process.  
+
+`acquire(&p->lock);` — Acquire the process lock  
+The kernel acquires the process lock before checking or changing the process's sleep state.  
+This coordinates with other kernel operations, including wakeups.  
+
+`if (p->chan != 0) {` — Check whether a sleep channel is registered  
+The operator `!=` means not equal to.  
+This checks whether the process still has a non-null sleep channel.  
+Why is this important?  
+Because a wakeup might have happened after `sleep_prepare()` but before `sleep()`.  
+If the wakeup clears `p->chan`, then this condition becomes false and the process does not go to sleep.  
+That is an important part of the intended lost-wakeup prevention mechanism.  
+
+`p->state = SLEEPING;` — Mark the process as sleeping  
+This changes the process's state to `SLEEPING`.  
+In xv6, process states include:  
+```powershell
+UNUSED
+USED
+SLEEPING
+RUNNABLE
+RUNNING
+ZOMBIE
+```
+A sleeping process is not eligible for normal CPU scheduling until it is awakened.
+
+`sched();` — Release the process lock  
+When the process resumes, or when the `if` condition was false, this statement releases its process lock.  
+Then `sleep()` returns to its caller.  
+
+**How do these functions work together?**  
+Consider the following code from your `acquiresleep()`:
+```powershell
+while (lk->locked) {
+  sleep_prepare(lk);
+  release(&lk->lk);
+  sleep();
+  acquire(&lk->lk);
+}
+```
+Suppose Process A already holds the sleeping lock, and Process B wants to acquire it.  
+
+**Process B's waiting sequence**  
+1. **Finds the lock occupied**
+   > `lk->locked == 1`
+
+2. **Registers the waiting channel**
+   > `sleep_prepare(lk)` sets `p->chan = lk`
+
+3. **Releases the internal spinlock**
+   > `release(&lk->lk)` allows Process A to release the sleeping lock
+
+4. **Attempts to sleep**
+   > `sleep()` checks whether the registered channel is still active
+
+5. **Eventually resumes**
+   > After being awakened and scheduled, Process B reacquires `lk->lk`
+
+6. **Checks the condition again**
+   > If the sleeping lock is still occupied, Process B repeats the loop
+
+**Important Part: Preventing a lost wakeup**  
+Considering the scenario, Process B executes
+```powershell
+sleep_prepare(lk);
+release(&lk->lk);
+```
+But before B executes `sleep()`, Process A releases the sleeping lock and calls `wakeup(lk)`.  
+What happens?  
+In a correctly coordinated implementation, `wakeup(lk)` recognizes B's registered channel and clears it.  
+Then, when B calls:
+```powershell
+if (p->chan != 0)
+```
+the condition is false.  
+Therefore, B skips sleeping and returns to acquiresleep(), where it rechecks the lock.  
+This prevents B from sleeping indefinitely after the lock has already become available.  
+
+There is one important qualification: the exact guarantee depends on how our version implements `wakeup()`. These two functions show the preparation and sleeping sides, but not the complete wakeup mechanism.  
+
+So far summery  
+
+| Function | Responsibility |
+|----------|----------------|
+| `sleep_prepare(chan)` | Registers the process's intended sleep channel |
+| `sleep()` | Puts the process to sleep if its channel is still registered |
+| `sched()` | Switches execution away from the current process |
+| `wakeup(chan)` | Notifies waiting processes; exact behavior depends on its implementation |
+| `acquiresleep()` | Coordinates these operations to acquire an exclusive sleeping lock |
+
 
 
 
