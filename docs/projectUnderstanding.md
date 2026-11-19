@@ -220,7 +220,81 @@ It cannot distinguish between a reader holding the lock and a writer holding the
 | `active_readers` | Number of readers currently holding the lock |
 | `active_writer` | Whether a writer currently holds the lock |
 | `waiting_writers` | Number of writers waiting for exclusive access |  
+
 For example, a writer-preference policy could prevent new readers from acquiring the lock once a writer starts waiting. That can prevent writer starvation, although we must also consider fairness to readers.
+
+## Understanding sleep_prepare() and sleep() functions [Fahad Al Hasan] ##
+These two functions work together to make a process wait safely. They are particularly important for Reader-Writer Inode Locks modification, because we'll eventually need to make readers and writers wait without missing wakeup notifications.
+
+Inside `xv6/kernal/proc.c`
+```poweshell
+void
+sleep_prepare(void *chan)
+{
+  struct proc *p = myproc();
+
+  acquire(&p->lock);
+
+  if (chan == 0)
+    panic("sleep_prepare: zero chan");
+
+  p->chan = chan;
+
+  release(&p->lock);
+}
+```
+**Understanding Step by step**  
+`void sleep_prepare(void *chan)`  
+`voide *chan` means the parameter is a generic pointer.  
+A `void *` can hold an address associated with different data types.  
+In the acquiresleep() function  
+`sleep_prepare(lk)` the pointer `lk` is used as **sleep channel.**  
+A sleep channel identifies what a process is waiting for. It is not necessarily a memory location whose contents the process needs to read.  
+
+`struct proc *p = myproc()` — Identify the current process   
+
+ Here:
+ - `struct proc` is the structure representing a process.
+ - `*p` declares a pointer to that structure.
+ - `myproc()` returns the current process.
+For example, if Process B is executing `sleep_prepare()`, then `p` points to Process B's process structure.
+
+`acquire(&p->lock);` — Acquire the process lock  
+This acquires the spinlock protecting the process's state.  
+This is not the same spinlock as `lk->lk` in `acquiresleep()`.  
+| Lock | Protects |
+|----------|---------|
+| `lk->lk` |The sleeping lock's internal state |
+| `p->lock` | The process's state, including its sleep channel |  
+
+```powershell
+if (chan == 0)  
+  panic("sleep_prepare: zero chan");
+```
+Check for an invalid channel  
+The expression `chan == 0` checks whether the channel is a null pointer.  
+If it is null, `panic()` reports a fatal kernel error.  
+
+`p->chan = chan;` — Record the sleep channel.  
+It records the channel that the current process intends to wait on.  
+For example: 
+```powershell
+Process B:
+    p->chan = address of inode sleeping lock
+```
+This function does not set `p->state = SLEEPING`.  
+It only prepares the process for sleeping by recording its channel.  
+
+`release(&p->lock);` — Release the process lock  
+This releases the spinlock protecting the process structure.  
+At this point, `sleep_prepare()` is finished, and the process can continue executing.
+
+
+
+
+
+
+
 
 
 
