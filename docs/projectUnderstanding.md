@@ -118,7 +118,7 @@ struct sleeplock {
 };
 ```
 - `locked` — Indicates whether the sleeping lock is held.
-- `lk` — A spinlock used internally to protect the sleeping lock's state.
+- `lk` — A spinlock used internally to protect the sleeping lock's state.  
 This structure does not maintain a reader count or a waiting-writer count.  
 That is one reason the existing sleeping lock does not directly provide the reader-writer behavior that our project requires.
 
