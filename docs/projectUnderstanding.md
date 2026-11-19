@@ -212,14 +212,15 @@ Visualizing the existing locking mechanism
 <img width="638" height="571" alt="image" src="https://github.com/user-attachments/assets/ed357f95-ccb6-42b7-9bf9-41d3b3621ef4" />
 The current sleeping lock has only two logical states:  
 - `locked = 0` — available
-- `locked = 1` — occupied
+- `locked = 1` — occupied  
 It cannot distinguish between a reader holding the lock and a writer holding the lock. So our reader-writer lock will eventually need a track additional information such as:
 
 | Variable | Purpose |
 |----------|---------|
 | `active_readers` | Number of readers currently holding the lock |
 | `active_writer` | Whether a writer currently holds the lock |
-| `waiting_writers` | Number of writers waiting for exclusive access |
+| `waiting_writers` | Number of writers waiting for exclusive access |  
+For example, a writer-preference policy could prevent new readers from acquiring the lock once a writer starts waiting. That can prevent writer starvation, although we must also consider fairness to readers.
 
 
 
