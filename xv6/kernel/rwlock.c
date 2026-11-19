@@ -35,7 +35,14 @@ acquireread(struct rwlock *lock)
 
   lock->readers++;
 
-  release(&lock->lk);
+int active_readers = lock->readers;
+
+release(&lock->lk);
+
+if (active_readers > 1) {
+  printk("[RWLOCK] Concurrent readers: %d\n", active_readers);
+}
+
 }
 
 void
@@ -73,7 +80,8 @@ acquirewrite(struct rwlock *lock)
     sleep();
     acquire(&lock->lk);
   }
-
+    if (lock->writer || lock->readers != 0){
+        panic("rwlock: writer overlap");}
   lock->waiting_writers--;
   lock->writer = 1;
   lock->writer_pid = myproc()->pid;

@@ -1,3 +1,5 @@
+#include "rwlock.h"
+#include "sleeplock.h"
 struct file {
   enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
   int ref; // reference count
@@ -6,6 +8,7 @@ struct file {
   struct pipe *pipe; // FD_PIPE
   struct inode *ip;  // FD_INODE and FD_DEVICE
   uint off;          // FD_INODE
+  struct sleeplock offlock;  // Protects the shared file offset
   short major;       // FD_DEVICE
 };
 
@@ -18,7 +21,8 @@ struct inode {
   uint dev;              // Device number. Identifies the device containing the inode
   uint inum;             // Identifies the Inode number
   int ref;               // Reference count. 	Number of in-memory references to the inode
-  struct sleeplock lock; // protects everything below here. Protects inode contents during operations
+  //struct sleeplock lock; // protects everything below here. Protects inode contents during operations
+  struct rwlock lock; // Protects inode contents using reader-writer locking
   int valid;             // inode has been read from disk? Indicates whether inode metadata has been loaded from disk
 
   short type; // copy of disk inode. Identifies the file type

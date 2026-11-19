@@ -22,7 +22,13 @@ struct {
 void
 fileinit(void)
 {
+  struct file *f;
+
   initlock(&ftable.lock, "ftable");
+
+  for (f = ftable.file; f < ftable.file + NFILE; f++) {
+    initsleeplock(&f->offlock, "file_offset");
+  }
 }
 
 // Allocate a file structure.
@@ -119,11 +125,15 @@ fileread(struct file *f, uint64 addr, int n)
       return -1;
     r = devsw[f->major].read(1, addr, n);
   } else if (f->type == FD_INODE) {
-    ilock(f->ip);
-    if ((r = readi(f->ip, 1, addr, f->off, n)) > 0)
-      f->off += r;
-    iunlock(f->ip);
-  } else {
+  acquiresleep(&f->offlock);
+
+  ilockread(f->ip);
+  if ((r = readi(f->ip, 1, addr, f->off, n)) > 0)
+    f->off += r;
+  iunlockread(f->ip);
+
+  releasesleep(&f->offlock);
+} else {
     panic("fileread");
   }
 
@@ -147,6 +157,7 @@ filewrite(struct file *f, uint64 addr, int n)
       return -1;
     ret = devsw[f->major].write(1, addr, n);
   } else if (f->type == FD_INODE) {
+    acquiresleep(&f->offlock);
     // write a few blocks at a time to avoid exceeding
     // the maximum log transaction size, including
     // i-node, indirect block, allocation blocks,
@@ -172,6 +183,7 @@ filewrite(struct file *f, uint64 addr, int n)
       i += r;
     }
     ret = (i == n ? n : -1);
+    releasesleep(&f->offlock);
   } else {
     panic("filewrite");
   }

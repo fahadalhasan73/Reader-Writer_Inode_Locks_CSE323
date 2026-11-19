@@ -187,7 +187,8 @@ iinit()
 
   initlock(&itable.lock, "itable");
   for (i = 0; i < NINODE; i++) {
-    initsleeplock(&itable.inode[i].lock, "inode");
+    //initsleeplock(&itable.inode[i].lock, "inode");
+    initrwlock(&itable.inode[i].lock, "inode");
   }
 }
 
@@ -300,7 +301,8 @@ ilock(struct inode *ip)
   if (ip == 0 || ip->ref < 1)
     panic("ilock");
 
-  acquiresleep(&ip->lock);
+  //acquiresleep(&ip->lock);
+  acquirewrite(&ip->lock);
 
   if (ip->valid == 0) {
     bp = bread(ip->dev, IBLOCK(ip->inum, sb));
@@ -318,14 +320,46 @@ ilock(struct inode *ip)
   }
 }
 
+// Acquire a shared reader lock on an inode.
+// Initialize inode metadata exclusively if necessary.
+void
+ilockread(struct inode *ip)
+{
+  if (ip == 0 || ip->ref < 1)
+    panic("ilockread");
+
+  acquireread(&ip->lock);
+
+  if (ip->valid == 0) {
+    releaseread(&ip->lock);
+
+    // ilock() initializes metadata under an exclusive lock.
+    ilock(ip);
+    iunlock(ip);
+
+    // Reacquire shared access after initialization.
+    acquireread(&ip->lock);
+  }
+}
+
 // Unlock the given inode.
 void
 iunlock(struct inode *ip)
 {
-  if (ip == 0 || !holdingsleep(&ip->lock) || ip->ref < 1)
+  if (ip == 0 || ip->ref < 1 || !holdingwrite(&ip->lock))
     panic("iunlock");
 
-  releasesleep(&ip->lock);
+  releasewrite(&ip->lock);
+}  
+
+// Release a shared reader lock on an inode.
+void
+iunlockread(struct inode *ip)
+{
+  if (ip == 0 || ip->ref < 1)
+    panic("iunlockread");
+
+  releaseread(&ip->lock);
 }
 
 // Mark the on-disk inode free.
@@ -359,13 +393,15 @@ iput(struct inode *ip)
 
   if (last) {
     // ip->ref == 1 means no other process can have ip locked.
-    acquiresleep(&ip->lock);
+    //acquiresleep(&ip->lock);
+    acquirewrite(&ip->lock);
     release(&itable.lock);
 
     itrunc(ip); // free the data blocks (type stays nonzero on disk)
     ip->valid = 0;
 
-    releasesleep(&ip->lock);
+    //releasesleep(&ip->lock);
+    releasewrite(&ip->lock);
 
     acquire(&itable.lock);
   }
@@ -417,6 +453,39 @@ ireclaim(int dev)
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 // returns 0 if out of disk space.
+// Look up an existing disk block without allocating.
+// Safe for shared inode readers.
+static uint
+bmapread(struct inode *ip, uint bn)
+{
+  uint addr;
+  uint *a;
+  struct buf *bp;
+
+  // Direct blocks.
+  if (bn < NDIRECT) {
+    return ip->addrs[bn];
+  }
+
+  bn -= NDIRECT;
+
+  // Indirect blocks.
+  if (bn < NINDIRECT) {
+    if ((addr = ip->addrs[NDIRECT]) == 0)
+      return 0;
+
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+
+    addr = a[bn];
+
+    brelse(bp);
+    return addr;
+  }
+
+  panic("bmapread: out of range");
+}
+
 static uint
 bmap(struct inode *ip, uint bn)
 {
@@ -518,7 +587,7 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
     n = ip->size - off;
 
   for (tot = 0; tot < n; tot += m, off += m, dst += m) {
-    uint addr = bmap(ip, off / BSIZE);
+    uint addr = bmapread(ip, off / BSIZE);
     if (addr == 0)
       break;
     bp = bread(ip->dev, addr);
