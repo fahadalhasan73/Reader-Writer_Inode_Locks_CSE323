@@ -191,5 +191,37 @@ The order matters here.
 4. Reacquire the spinlock: Safely inspect the lock state again after waking.
 
 Critical Section:  
-`while (lk->locked)` This means the sleeping lock is exclusively held by one process at a time. Our future reader-writer implementation will require different conditions for readers and writers, as well as a policy that prevents writer starvation.
+`while (lk->locked)` This means the sleeping lock is exclusively held by one process at a time. Our future reader-writer implementation will require different conditions for readers and writers, as well as a policy that prevents writer starvation.  
+
+**2. releasesleep() — Releasing the lock**  
+```powershell
+void
+releasesleep(struct sleeplock *lk) //Releasing the lock
+{
+  acquire(&lk->lk);
+  lk->locked = 0; //makes the sleeping lock available
+  lk->pid = 0;
+  wakeup(lk); //wakes processes sleeping on that lock's channel.
+  /*
+  However, waking up does not guarantee that a particular waiting process acquires the lock next. Each awakened process must check the condition again.
+  */
+  release(&lk->lk);
+}
+```
+Visualizing the existing locking mechanism  
+<img width="638" height="571" alt="image" src="https://github.com/user-attachments/assets/ed357f95-ccb6-42b7-9bf9-41d3b3621ef4" />
+The current sleeping lock has only two logical states:  
+- `locked = 0` — available
+- `locked = 1` — occupied
+It cannot distinguish between a reader holding the lock and a writer holding the lock. So our reader-writer lock will eventually need a track additional information such as:
+
+| Variable | Purpose |
+|----------|---------|
+| `active_readers` | Number of readers currently holding the lock |
+| `active_writer` | Whether a writer currently holds the lock |
+| `waiting_writers` | Number of writers waiting for exclusive access |
+
+
+
+
 
